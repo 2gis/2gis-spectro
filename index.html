@@ -1,0 +1,150 @@
+<?doctype html>
+<html>
+    <head>
+        <title>Spectro Audio Visualizer</title>
+        <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            html {
+                background-image: url('zoom_bg_1.png');
+            }
+
+            #start {
+                position: absolute;
+                top: 16px;
+                left: 16px;
+                z-index: 10;
+            }
+
+            #bgselect {
+                position: absolute;
+                top: 16px;
+                left: 250px;
+                z-index: 10;
+            }
+            
+            #canvas {
+                width: 80vw; 
+                height: 80vh;
+            }
+        </style>
+    </head>
+    <body>
+        <input id="start" type="file" accept="audio/*" />
+        <select id="bgselect">
+            <option value="1">Нейтральный</option>
+            <option value="2">Нейтральный Больше</option>
+            <option value="3">Зеленая линия 1</option>
+            <option value="4">Зеленая линия 2</option>
+            <option value="5">Зеленая линия 3</option>
+        </select>
+        <canvas id="canvas"></canvas>
+        <script>
+            const FFT_SIZE = 1024;
+            const FFT_DIVISOR = 8;
+            const FFT_SCOPE = 0.35;
+            const canvas = document.getElementById("canvas");
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+
+            let frequencyArray = [];
+            let analyser;
+            let request;
+            var flag = 0;
+           
+            const ctx = canvas.getContext("2d");
+            const bars = Math.trunc((FFT_SIZE / FFT_DIVISOR) * FFT_SCOPE);
+            const width = canvas.clientWidth;
+            const height = canvas.clientHeight;
+            const lineWidth = Math.trunc(width / bars);
+            const linePad = 7;
+            const centerX = width / 2;
+            const centerY = height / 2;
+
+            const audio = new Audio();
+
+            const context = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = context.createAnalyser();
+            analyser.fftSize = FFT_SIZE;
+
+            const source = context.createMediaElementSource(audio);
+            source.connect(analyser);
+
+            analyser.connect(context.destination);
+            frequencyArray = new Uint8Array(analyser.frequencyBinCount);
+
+            const startButton = document.getElementById('start');
+            const bgSelector = document.getElementById('bgselect');
+
+            bgSelector
+                .addEventListener('change', function(ev) {
+                    const el = ev.target;
+                    const selected = el.options[el.selectedIndex]
+                    document.documentElement.style.backgroundImage = `url('zoom_bg_${selected.value}.png')`;
+                })
+            
+
+            startButton
+                .addEventListener('change', function() {
+                    startButton.style.display = 'none';
+                    bgSelector.style.display = 'none';
+                    var files = this.files;
+                    var file = URL.createObjectURL(files[0]); 
+
+                    context.resume().then(() => {
+                        audio.src = file; 
+                        audio.load();
+                        audio.play();
+                        requestAnimationFrame(drawCanvas);
+                    })
+                });
+
+            
+            function close() {
+                if (flag == 0) {
+                    flag=1;
+                } else {
+                    ctx.clearRect(0, 0, width, height);
+                    flag=0;
+                }
+            }
+
+            function drawCanvas () {
+                ctx.clearRect(0, 0, width, height);
+                // analyser.getByteTimeDomainData(frequencyArray);
+                analyser.getByteFrequencyData(frequencyArray);
+                for (var i = 0; i < bars; i += 1) {
+                    let value = (frequencyArray[i * FFT_DIVISOR] / 255) * height * 0.5;
+                    if (Number.isNaN(value)) {
+                        value = 0;
+                    }
+                    drawLine({ i, bars, value }, canvas, ctx);
+                }
+                if (flag == 0) {
+                    request = requestAnimationFrame(drawCanvas);
+                } else {
+                    flag = 2;
+                    close();
+                }
+            }
+
+            function drawLine (opts, canvas, ctx) {
+                const { i, bars, value } = opts;
+                // draw the bar
+                ctx.strokeStyle = "#fefefe";
+                ctx.lineWidth = lineWidth - linePad * 2;
+                ctx.lineCap = "round";
+                ctx.beginPath();
+                ctx.moveTo(lineWidth * 0.5 + i * lineWidth, height * 0.75);
+                ctx.lineTo(lineWidth * 0.5 + i * lineWidth, height * 0.75 - value);
+                ctx.stroke();
+            };
+        </script>
+    </body>
+</html>
